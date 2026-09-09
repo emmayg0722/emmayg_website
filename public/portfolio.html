@@ -854,7 +854,7 @@ div,section,article,main,header,footer,nav,ul,ol,li{min-width:0}
         <div class="news-footer" id="newsFooter"><span id="newsCount">0 stories</span> · live · <span id="newsClock">--:--:--</span></div>
       </div>
       <section class="section ai-news-shell compact-list-shell model-shell">
-        <div class="ai-news-top"><div><div class="ai-news-label">Ranked Models & Tools</div><p class="feed-subtitle">Benchmark-oriented model and tool shortlist with access and category filters. For a live, refreshable feed, see Trending on Hugging Face below.</p></div><span class="live-pill">Benchmarked</span></div>
+        <div class="ai-news-top"><div><div class="ai-news-label">Model Catalogue</div><p class="feed-subtitle">Live catalogue of the newest models reaching OpenRouter, with context window, list price and whether the weights are open.</p></div><span class="live-pill">Live</span></div>
         <div class="model-filter-wrap"><div class="news-filter-row model-filter-row access-row" id="modelAccessFilters"></div><div class="news-filter-row model-filter-row category-row" id="modelCategoryFilters"></div></div>
         <div class="news-feed-box compact-feed model-feed" id="modelRows"></div>
         <div class="news-footer" id="modelFooter"></div>
@@ -2825,7 +2825,7 @@ function setLang(l){lang=l;langMenu.classList.remove('open');langBtn.textContent
 
 const hubDataMeta={
  news:{ref:'Live headlines pulled from Hacker News (Algolia API), filtered to AI-related stories · ranked by newest + points',links:[['Hacker News','https://news.ycombinator.com/']]},
- models:{ref:'Updated from Artificial Analysis Intelligence Index, LMArena overview, OpenRouter usage rankings, access type, category fit, and product usefulness',links:[['Artificial Analysis','https://artificialanalysis.ai/leaderboards/models'],['LMArena','https://huggingface.co/spaces/lmarena-ai/arena-leaderboard'],['OpenRouter','https://openrouter.ai/']]},
+ models:{ref:'Live from the OpenRouter public model catalogue \u00b7 newest releases first \u00b7 context window and list price per million tokens as published by OpenRouter \u00b7 open means open weights are published on Hugging Face',links:[['Artificial Analysis','https://artificialanalysis.ai/leaderboards/models'],['LMArena','https://huggingface.co/spaces/lmarena-ai/arena-leaderboard'],['OpenRouter','https://openrouter.ai/']]},
  repos:{ref:'Live from the GitHub Search API · repos tagged "ai", pushed in the last 30 days, sorted by stars',links:[['GitHub Trending','https://github.com/trending'],['GitHub AI Topic','https://github.com/topics/ai']]},
  skills:{ref:'Curated applied AI skills from prompt engineering, enterprise AI workflows, and practical AI product delivery',links:[['OpenAI Prompting','https://developers.openai.com/api/docs/guides/prompt-engineering'],['Prompt Engineering Guide','https://www.promptingguide.ai/']]},
  recentPapers:{ref:'Live from Hacker News (Algolia API), filtered to stories linking to arxiv.org · ranked by newest',links:[['arXiv cs.AI','https://arxiv.org/list/cs.AI/recent']]},
@@ -2894,7 +2894,7 @@ function renderModels(){
   catEl.innerHTML=cats.map(c=>`<button class="news-filter ${modelFilterClass(c)} ${((c==='All categories'&&modelCategory==='All')||c===modelCategory)?'active':''}" onclick="setModelFilter('${c}')">${LT(c)}</button>`).join('');
   const visible=models.filter(m=>(modelAccess==='All access'||m[4]===modelAccess.toLowerCase())&&(modelCategory==='All'||m[2]===modelCategory));
   modelRows.innerHTML=visible.map(m=>`<a class="feed-item" href="${escapeHtml(m[5])}" target="_blank" rel="noopener"><div><div><span class="feed-source-pill">#${m[0]}</span><span class="feed-title">${LT(escapeHtml(m[1]))}</span></div><div class="feed-meta"><span class="feed-metric">${LT(m[2])}</span><span>${LT(escapeHtml(m[3]))}</span><span class="access-badge ${m[4]}">${m[4]==='open'?LT('Open resource'):LT('Closed / hosted')}</span></div></div><span class="feed-arrow">↗</span></a>`).join('');
-  if(window.modelFooter)modelFooter.innerHTML=hubFooterHtml('models',`${visible.length} ${LT('models/tools shown')}`,LT('ranked view'),`${LT('Access')}: ${LT(modelAccess)} · ${LT('Category')}: ${modelCategory==='All'?LT('All categories'):LT(modelCategory)}`,false)
+  if(window.modelFooter)modelFooter.innerHTML=hubFooterHtml('models',`${visible.length} ${LT('models/tools shown')}`,LT('newest first'),`${LT('Access')}: ${LT(modelAccess)} · ${LT('Category')}: ${modelCategory==='All'?LT('All categories'):LT(modelCategory)}`)
 }
 
 function setModelAccess(a){modelAccess=a;openOnly=a==='Open';renderModels()}
@@ -3351,6 +3351,36 @@ function categorizeHfModel(pipelineTag){
   if(t.includes('classification'))return 'Classification';
   return 'Other';
 }
+function categorizeOrModel(id){
+  const p=(id||'').split('/')[0].toLowerCase();
+  const map={anthropic:'Anthropic',openai:'OpenAI',google:'Google','meta-llama':'Meta',mistralai:'Mistral',deepseek:'DeepSeek',qwen:'Qwen','x-ai':'xAI',amazon:'Amazon',microsoft:'Microsoft',cohere:'Cohere',ai21:'AI21',nvidia:'NVIDIA',moonshotai:'Moonshot','z-ai':'Z.ai',perplexity:'Perplexity',inception:'Inception'};
+  return map[p]||(p?p.charAt(0).toUpperCase()+p.slice(1):'Other');
+}
+function orPrice(v){const n=Number(v||0);if(!n)return 'free';const per=n*1e6;return '$'+(per>=10?per.toFixed(0):per.toFixed(2))+'/M';}
+async function fetchLiveModels(force){
+  if(!force){const cached=liveCacheGet('liveModelsCache');if(cached)return cached}
+  const res=await fetch('https://openrouter.ai/api/v1/models');
+  if(!res.ok)throw new Error('OpenRouter '+res.status);
+  const json=await res.json();
+  const list=(json&&Array.isArray(json.data)?json.data:[])
+    .filter(m=>m&&m.id&&!/:/.test(m.id.split('/').pop()||'')&&!/\(batch\)/i.test(m.name||''))
+    .sort((a,b)=>(b.created||0)-(a.created||0))
+    .slice(0,30);
+  const data=list.map((m,i)=>{
+    const ctx=m.context_length?Math.round(m.context_length/1000)+'K context':'context n/a';
+    const price=m.pricing?orPrice(m.pricing.prompt)+' in \u00b7 '+orPrice(m.pricing.completion)+' out':'pricing n/a';
+    return [String(i+1),m.name||m.id,categorizeOrModel(m.id),ctx+' \u00b7 '+price,m.hugging_face_id?'open':'closed','https://openrouter.ai/'+m.id];
+  });
+  if(data.length)liveCacheSet('liveModelsCache',data);
+  return data;
+}
+async function loadLiveModels(isManual=false){
+  try{
+    const data=await fetchLiveModels(isManual);
+    if(data&&data.length){models.length=0;models.push(...data);modelCategory='All';modelAccess='All access';hubRefreshState.models=hubStamp()}
+  }catch(e){console.warn('Live model catalogue fetch failed',e)}
+  renderModels();
+}
 async function fetchLiveHfModels(force){
   if(!force){const cached=liveCacheGet('liveHfModelsCache');if(cached)return cached}
   const res=await fetch('https://huggingface.co/api/models?sort=downloads&direction=-1&limit=20');
@@ -3435,7 +3465,7 @@ function manualRefreshRecentPapers(){
   loadLiveRecentPapers(true).finally(()=>{if(btn){btn.classList.remove('spinning');btn.disabled=false;}});
 }
 
-function boot(){initTabs();renderNews();renderModels();renderRepos();renderHfModels();renderPrompts();renderCompass();renderRecentPapers();renderPlaybooks();renderProjects();applyLang();handlePolicyHash();loadLiveNews();loadLiveRepos();loadLiveHfModels();loadLiveRecentPapers()}boot();window.addEventListener("hashchange",handlePolicyHash);
+function boot(){initTabs();renderNews();renderModels();renderRepos();renderHfModels();renderPrompts();renderCompass();renderRecentPapers();renderPlaybooks();renderProjects();applyLang();handlePolicyHash();loadLiveNews();loadLiveModels();loadLiveRepos();loadLiveHfModels();loadLiveRecentPapers()}boot();window.addEventListener("hashchange",handlePolicyHash);
 
 applyInitialHash();
 </script>
