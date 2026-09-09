@@ -854,7 +854,7 @@ div,section,article,main,header,footer,nav,ul,ol,li{min-width:0}
         <div class="news-footer" id="newsFooter"><span id="newsCount">0 stories</span> · live · <span id="newsClock">--:--:--</span></div>
       </div>
       <section class="section ai-news-shell compact-list-shell model-shell">
-        <div class="ai-news-top"><div><div class="ai-news-label">Model Catalogue</div><p class="feed-subtitle">Live catalogue of the newest models reaching OpenRouter, with context window, list price and whether the weights are open.</p></div><span class="live-pill">Live</span></div>
+        <div class="ai-news-top"><div><div class="ai-news-label">Model Catalogue</div><p class="feed-subtitle">Live catalogue of the newest models reaching OpenRouter, with context window, list price and whether the weights are open.</p></div><div style="display:flex;align-items:center;gap:10px"><span class="live-pill"><span class="live-dot"></span>Live</span><button class="refresh-btn" id="modelRefreshBtn" onclick="manualRefreshModels()" title="Refresh model catalogue" aria-label="Refresh model catalogue">↻</button></div></div>
         <div class="model-filter-wrap"><div class="news-filter-row model-filter-row access-row" id="modelAccessFilters"></div><div class="news-filter-row model-filter-row category-row" id="modelCategoryFilters"></div></div>
         <div class="news-feed-box compact-feed model-feed" id="modelRows"></div>
         <div class="news-footer" id="modelFooter"></div>
@@ -3408,6 +3408,12 @@ function renderHfModels(){
   if(!hubRefreshState.hfModels)hubRefreshState.hfModels=hubStamp();
   const footer=document.getElementById('hfModelFooter');
   if(footer)footer.innerHTML=hubFooterHtml('hfModels',`${visible.length} ${LT('models shown')}`,LT('downloads this month'),`${LT('Filter')}: ${LT(hfModelCategory)}`);
+}
+function manualRefreshModels(){
+  const btn=document.getElementById('modelRefreshBtn');
+  if(btn){btn.classList.add('spinning');btn.disabled=true;}
+  hubRefreshState.models=hubStamp();
+  loadLiveModels(true).finally(()=>{if(btn){btn.classList.remove('spinning');btn.disabled=false;}});
 }
 function manualRefreshHfModels(){
   const btn=document.getElementById('hfModelsRefreshBtn');
